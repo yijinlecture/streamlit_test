@@ -1,10 +1,11 @@
 import os
 import streamlit as st
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_community.document_loaders import PyPDFLoader
+from langchain.vectorstores import FAISS
+from langchain.chat_models import ChatOpenAI
+from langchain.document_loaders import PyPDFLoader
 from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.tools.retriever import create_retriever_tool
 from langchain_core.prompts import ChatPromptTemplate
 import tempfile
@@ -12,7 +13,7 @@ from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_community.utilities import SerpAPIWrapper
 from langchain.agents import Tool
 
-# .env 파일 로드 (Colab에서는 필요 없거나 직접 설정하므로 생략 가능하지만 유지)
+# .env 파일 로드
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 # SerpAPI 검색 툴 정의
@@ -27,7 +28,7 @@ def search_web():
             title = r.get("title")
             link = r.get("link")
             source = r.get("source")
-            snippet = r.get("snippet")
+            snippet = r.get("snippet")  # ✅ snippet 추가
             if link:
                 formatted.append(f"- [{title}]({link}) ({source})\n  {snippet}")
             else:
@@ -67,8 +68,7 @@ def load_pdf_files(uploaded_files):
 
 # Agent 대화 실행
 def chat_with_agent(user_input, agent_executor):
-    # invoke 사용 권장 (구버전 호환)
-    result = agent_executor.invoke({"input": user_input})
+    result = agent_executor({"input": user_input})
     return result['output']
 
 # 세션별 히스토리 관리
@@ -87,12 +87,7 @@ def main():
     st.set_page_config(page_title="AI 비서", layout="wide", page_icon="🤖")
 
     with st.container():
-        # 이미지가 없으면 에러가 나지 않도록 처리
-        if os.path.exists('./chatbot_logo.png'):
-            st.image('./chatbot_logo.png', use_column_width=True)
-        else:
-            st.title("🤖") # 이미지가 없으면 이모지로 대체
-            
+        st.image('./chatbot_logo.png', use_container_width=True)
         st.markdown('---')
         st.title("안녕하세요! RAG를 활용한 'AI 비서 톡톡이' 입니다")
 
@@ -148,14 +143,9 @@ def main():
             session_id = "default_session"
             session_history = get_session_history(session_id)
 
-            # 이전 대화 내용을 문자열로 변환하여 문맥 제공 (간단한 방식)
             if session_history.messages:
-                # ChatMessage 객체를 문자열로 변환
-                history_str = "\n".join([f"{msg.type}: {msg.content}" for msg in session_history.messages])
-                # context를 포함하여 질문 전달 (실제 구현에서는 RunnableWithMessageHistory 사용 권장)
-                # 여기서는 작성해주신 로직대로 질문에 붙여서 보냄
-                final_input = f"{user_input}\n\n[Conversation History]\n{history_str}"
-                response = chat_with_agent(final_input, agent_executor)
+                prev_msgs = [{"role": msg['role'], "content": msg['content']} for msg in session_history.messages]
+                response = chat_with_agent(user_input + "\n\nPrevious Messages: " + str(prev_msgs), agent_executor)
             else:
                 response = chat_with_agent(user_input, agent_executor)
 
